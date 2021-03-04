@@ -14,9 +14,10 @@
 
 from batchgenerators.utilities.file_and_folder_operations import *
 from multiprocessing import Pool
-from nnunet.paths import splitted_4d_output_dir, cropped_output_dir
 import numpy as np
 import pickle
+
+from nnunet.config import SPLITTED_4D_OUTPUT_DIR, CROPPED_OUTPUT_DIR
 from nnunet.preprocessing.cropping import get_patient_identifiers_from_cropped_files
 from skimage.morphology import label
 from collections import OrderedDict
@@ -263,13 +264,13 @@ class DatasetAnalyzer(object):
 
 
 if __name__ == "__main__":
-    tasks = [i for i in os.listdir(splitted_4d_output_dir) if os.path.isdir(os.path.join(splitted_4d_output_dir, i))]
+    tasks = [i for i in os.listdir(SPLITTED_4D_OUTPUT_DIR) if os.path.isdir(os.path.join(SPLITTED_4D_OUTPUT_DIR, i))]
     tasks.sort()
 
     t = 'Task14_BoneSegmentation'
 
     print("\n\n\n", t)
-    cropped_out_dir = os.path.join(cropped_output_dir, t)
+    cropped_out_dir = os.path.join(CROPPED_OUTPUT_DIR, t)
 
     dataset_analyzer = DatasetAnalyzer(cropped_out_dir, overwrite=False)
     props = dataset_analyzer.analyze_dataset()

@@ -17,10 +17,25 @@ The code was wastly inspired by the nnU-Net framework authored by Fabian Isensee
 The instalation is only tested on Linux (Ubuntu). It may work on other operating systems as well but we do not guarantee it will.
 
 Installation instructions
-1) Install PyTorch (https://pytorch.org/get-started/locally/)
-2) Clone this repository `git clone https://github.com/tureckova/Abdomen-CT-Image-Segmentation`
-3) Go into the repository (`cd Abdomen-CT-Image-Segmentation` on linux)
-4) Install with `pip install -r requirements.txt` followed by `pip install -e .`
+1) Install anaconda
+2) Create conda environment
+    ```bash
+    conda create -n AbdomenCTImageSegmentation python=3.9
+    ```
+3) Activate environment
+    ```bash
+    conda activate AbdomenCTImageSegmentation
+    ```
+4) Clone this repository `git clone https://github.com/tureckova/Abdomen-CT-Image-Segmentation`
+5) Go into the repository (`cd Abdomen-CT-Image-Segmentation` on linux)
+6) Install requirements 
+    ```bash
+    (AbdomenCTImageSegmentation) ~/Abdomen-CT-Image-Segmentation$ pip install -r requirements.txt
+    ```
+7) Create jupyter notebook kernel
+    ```bash
+    (AbdomenCTImageSegmentation) python -m ipykernel install --name "AbdomenCTImageSegmentation" --user
+    ```
 
 # Getting Started 
 All the commands in this section assume that you are in a terminal and your working directory is the repository folder 

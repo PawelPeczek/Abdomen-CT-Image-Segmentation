@@ -8,3 +8,6 @@ numpy
 sklearn
 SimpleITK
 pandas
+ipykernel
+torch
+torchvision

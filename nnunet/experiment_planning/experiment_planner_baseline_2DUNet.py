@@ -12,31 +12,43 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import os
 import shutil
+
+from nnunet.config import DEFAULT_PLANS_IDENTIFIER, CROPPED_OUTPUT_DIR, \
+    PRE_PROCESSING_OUTPUT_DIR, SPLITTED_4D_OUTPUT_DIR
 from nnunet.experiment_planning.experiment_planner_baseline_3DUNet import ExperimentPlanner
 from nnunet.experiment_planning.plan_and_preprocess_task import create_lists_from_splitted_dataset
 from nnunet.preprocessing.preprocessing import PreprocessorFor2D
 from nnunet.experiment_planning.configuration import *
-from nnunet.paths import *
 from nnunet.network_architecture import Generic_UNet
 import numpy as np
 from batchgenerators.utilities.file_and_folder_operations import join, load_pickle
 from nnunet.experiment_planning.common_utils import get_pool_and_conv_props
+from nnunet.utilities.argparse import ArgParserBuilder
 
 
 class ExperimentPlanner2D(ExperimentPlanner):
-    def __init__(self, folder_with_cropped_data, preprocessed_output_folder):
-        super(ExperimentPlanner2D, self).__init__(folder_with_cropped_data,
-                                                  preprocessed_output_folder)
+
+    def __init__(
+        self,
+        folder_with_cropped_data: str,
+        preprocessed_output_folder: str
+    ):
+        super(ExperimentPlanner2D, self).__init__(
+            folder_with_cropped_data=folder_with_cropped_data,
+            preprocessed_output_folder=preprocessed_output_folder
+        )
         self.data_identifier = "nnUNet_2D"
         self.transpose_forward = [0, 1, 2]
         self.transpose_backward = [0, 1, 2]
-        self.plans_fname = join(self.preprocessed_output_folder, default_plans_identifier + "_plans_2D.pkl")
-
+        self.plans_fname = join(
+            self.preprocessed_output_folder,
+            DEFAULT_PLANS_IDENTIFIER + "_plans_2D.pkl"
+        )
 
     def load_my_plans(self):
         self.plans = load_pickle(self.plans_fname)
-
         self.plans_per_stage = self.plans['plans_per_stage']
         self.dataset_properties = self.plans['dataset_properties']
         self.transpose_forward = self.plans['transpose_forward']
@@ -50,30 +62,42 @@ class ExperimentPlanner2D(ExperimentPlanner):
             new_median_shape = np.round(original_spacing / current_spacing * original_shape).astype(int)
             dataset_num_voxels = np.prod(new_median_shape) * num_cases
             input_patch_size = new_median_shape[transpose_forward][1:]
+            network_numpool, net_pool_kernel_sizes, net_conv_kernel_sizes, \
+            input_patch_size, shape_must_be_divisible_by = \
+                get_pool_and_conv_props(
+                    current_spacing_transposed,
+                    input_patch_size,
+                    FEATUREMAP_MIN_EDGE_LENGTH_BOTTLENECK,
+                    Generic_UNet.MAX_NUMPOOL_2D
+                )
+            estimated_gpu_ram_consumption = \
+                Generic_UNet.compute_approx_vram_consumption(
+                    input_patch_size,
+                    network_numpool,
+                    Generic_UNet.BASE_NUM_FEATURES_2D,
+                    Generic_UNet.MAX_FILTERS_2D,
+                    num_modalities,
+                    num_classes,
+                    net_pool_kernel_sizes
+                )
 
-            network_numpool, net_pool_kernel_sizes, net_conv_kernel_sizes, input_patch_size, \
-                shape_must_be_divisible_by = get_pool_and_conv_props(current_spacing_transposed, input_patch_size,
-                                                                     FEATUREMAP_MIN_EDGE_LENGTH_BOTTLENECK,
-                                                                     Generic_UNet.MAX_NUMPOOL_2D)
-
-            estimated_gpu_ram_consumption = Generic_UNet.compute_approx_vram_consumption(input_patch_size,
-                                                                                         network_numpool,
-                                                                                         Generic_UNet.BASE_NUM_FEATURES_2D,
-                                                                                         Generic_UNet.MAX_FILTERS_2D,
-                                                                                         num_modalities, num_classes,
-                                                                                         net_pool_kernel_sizes)
-
-            batch_size = int(np.floor(Generic_UNet.use_this_for_batch_size_computation_2D /
-                                      estimated_gpu_ram_consumption * Generic_UNet.DEFAULT_BATCH_SIZE_2D))
+            batch_size = int(np.floor(
+                Generic_UNet.use_this_for_batch_size_computation_2D /
+                estimated_gpu_ram_consumption * Generic_UNet.DEFAULT_BATCH_SIZE_2D
+            ))
             if batch_size < dataset_min_batch_size_cap:
-                raise RuntimeError("This framework is not made to process patches this large. We will add patch-based "
-                                   "2D networks later. Sorry for the inconvenience")
+                raise RuntimeError(
+                    "This framework is not made to process patches this large. "
+                    "We will add patch-based 2D networks later. "
+                    "Sorry for the inconvenience"
+                )
 
             # check if batch size is too large (more than 5 % of dataset)
-            max_batch_size = np.round(batch_size_covers_max_percent_of_dataset * dataset_num_voxels /
-                                      np.prod(input_patch_size)).astype(int)
+            max_batch_size = np.round(
+                batch_size_covers_max_percent_of_dataset * dataset_num_voxels /
+                np.prod(input_patch_size)
+            ).astype(int)
             batch_size = min(batch_size, max_batch_size)
-
             plan = {
                 'batch_size': batch_size,
                 'num_pool_per_axis': network_numpool,
@@ -88,7 +112,10 @@ class ExperimentPlanner2D(ExperimentPlanner):
             return plan
 
         use_nonzero_mask_for_normalization = self.determine_whether_to_use_mask_for_norm()
-        print("Are we using the nonzero maks for normalizaion?", use_nonzero_mask_for_normalization)
+        print(
+            "Are we using the nonzero maks for normalizaion?",
+            use_nonzero_mask_for_normalization
+        )
 
         spacings = self.dataset_properties['all_spacings']
         sizes = self.dataset_properties['all_sizes']
@@ -102,7 +129,10 @@ class ExperimentPlanner2D(ExperimentPlanner):
         max_spacing_axis = np.argmax(target_spacing)
         remaining_axes = [i for i in list(range(3)) if i != max_spacing_axis]
         self.transpose_forward = [max_spacing_axis] + remaining_axes
-        self.transpose_backward = [np.argwhere(np.array(self.transpose_forward) == i)[0][0] for i in range(3)]
+        self.transpose_backward = [
+            np.argwhere(np.array(self.transpose_forward) == i)[0][0]
+            for i in range(3)
+        ]
         new_shapes = new_shapes[:, self.transpose_forward]
 
         # we base our calculations on the median shape of the datasets
@@ -113,77 +143,110 @@ class ExperimentPlanner2D(ExperimentPlanner):
         print("the max shape in the dataset is ", max_shape)
         min_shape = np.min(np.vstack(new_shapes), 0)
         print("the min shape in the dataset is ", min_shape)
-
-        print("we don't want feature maps smaller than ", FEATUREMAP_MIN_EDGE_LENGTH_BOTTLENECK, " in the bottleneck")
+        print(
+            "we don't want feature maps smaller than ",
+            FEATUREMAP_MIN_EDGE_LENGTH_BOTTLENECK,
+            " in the bottleneck"
+        )
 
         # how many stages will the image pyramid have?
         self.plans_per_stage = []
-
-        self.plans_per_stage.append(get_properties_for_stage(target_spacing, target_spacing, median_shape,
-                                                              num_cases=len(self.list_of_cropped_npz_files),
-                                                              transpose_forward=self.transpose_forward,
-                                                             num_modalities=num_modalities,
-                                                             num_classes=len(all_classes) + 1))
-
+        self.plans_per_stage.append(get_properties_for_stage(
+            target_spacing, target_spacing, median_shape,
+            num_cases=len(self.list_of_cropped_npz_files),
+            transpose_forward=self.transpose_forward,
+            num_modalities=num_modalities,
+            num_classes=len(all_classes) + 1)
+        )
         print(self.plans_per_stage)
-
         self.plans_per_stage = self.plans_per_stage[::-1]
-        self.plans_per_stage = {i: self.plans_per_stage[i] for i in range(len(self.plans_per_stage))}  # convert to dict
-
+        self.plans_per_stage = {
+            i: self.plans_per_stage[i] for i in range(len(self.plans_per_stage))
+        }
         normalization_schemes = self.determine_normalization_scheme()
         only_keep_largest_connected_component, min_size_per_class, min_region_size_per_class = \
             self.determine_postprocessing()
 
         # these are independent of the stage
-        plans = {'num_stages': len(list(self.plans_per_stage.keys())), 'num_modalities': num_modalities,
-                 'modalities': modalities, 'normalization_schemes': normalization_schemes,
-                 'dataset_properties': self.dataset_properties, 'list_of_npz_files': self.list_of_cropped_npz_files,
-                 'original_spacings': spacings, 'original_sizes': sizes,
-                 'preprocessed_data_folder': self.preprocessed_output_folder, 'num_classes': len(all_classes),
-                 'all_classes': all_classes, 'base_num_features': Generic_UNet.BASE_NUM_FEATURES_3D,
-                 'use_mask_for_norm': use_nonzero_mask_for_normalization,
-                 'keep_only_largest_region': only_keep_largest_connected_component,
-                 'min_region_size_per_class': min_region_size_per_class, 'min_size_per_class': min_size_per_class,
-                 'transpose_forward': self.transpose_forward, 'transpose_backward': self.transpose_backward,
-                 'data_identifier': self.data_identifier, 'plans_per_stage': self.plans_per_stage}
-
+        plans = {
+            'num_stages': len(list(self.plans_per_stage.keys())),
+            'num_modalities': num_modalities,
+            'modalities': modalities,
+            'normalization_schemes': normalization_schemes,
+            'dataset_properties': self.dataset_properties,
+            'list_of_npz_files': self.list_of_cropped_npz_files,
+            'original_spacings': spacings,
+            'original_sizes': sizes,
+            'preprocessed_data_folder': self.preprocessed_output_folder,
+            'num_classes': len(all_classes),
+            'all_classes': all_classes,
+            'base_num_features': Generic_UNet.BASE_NUM_FEATURES_3D,
+            'use_mask_for_norm': use_nonzero_mask_for_normalization,
+            'keep_only_largest_region': only_keep_largest_connected_component,
+            'min_region_size_per_class': min_region_size_per_class,
+            'min_size_per_class': min_size_per_class,
+            'transpose_forward': self.transpose_forward,
+            'transpose_backward': self.transpose_backward,
+            'data_identifier': self.data_identifier,
+            'plans_per_stage': self.plans_per_stage
+        }
         self.plans = plans
         self.save_my_plans()
 
     def run_preprocessing(self, num_threads):
         if os.path.isdir(join(self.preprocessed_output_folder, "gt_segmentations")):
             shutil.rmtree(join(self.preprocessed_output_folder, "gt_segmentations"))
-        shutil.copytree(join(self.folder_with_cropped_data, "gt_segmentations"), join(self.preprocessed_output_folder,
-                                                                                      "gt_segmentations"))
+        shutil.copytree(
+            join(self.folder_with_cropped_data, "gt_segmentations"),
+            join(self.preprocessed_output_folder, "gt_segmentations")
+        )
         normalization_schemes = self.plans['normalization_schemes']
         use_nonzero_mask_for_normalization = self.plans['use_mask_for_norm']
         intensityproperties = self.plans['dataset_properties']['intensityproperties']
-        preprocessor = PreprocessorFor2D(normalization_schemes, use_nonzero_mask_for_normalization,
-                                           intensityproperties, self.transpose_forward[0])
-        target_spacings = [i["current_spacing"] for i in self.plans_per_stage.values()]
-        preprocessor.run(target_spacings, self.folder_with_cropped_data, self.preprocessed_output_folder,
-                         self.plans['data_identifier'], num_threads)
+        preprocessor = PreprocessorFor2D(
+            normalization_schemes,
+            use_nonzero_mask_for_normalization,
+            intensityproperties,
+            self.transpose_forward[0]
+        )
+        target_spacings = [
+            i["current_spacing"] for i in self.plans_per_stage.values()
+        ]
+        preprocessor.run(
+            target_spacings,
+            self.folder_with_cropped_data,
+            self.preprocessed_output_folder,
+            self.plans['data_identifier'],
+            num_threads
+        )
+
 
 if __name__ == "__main__":
-    t = "Task14_BoneSegmentation"
-
-    print("\n\n\n", t)
-    cropped_out_dir = os.path.join(cropped_output_dir, t)
-    preprocessing_output_dir_this_task = os.path.join(preprocessing_output_dir, t)
-    splitted_4d_output_dir_task = os.path.join(splitted_4d_output_dir, t)
+    parser = ArgParserBuilder()\
+        .initialize_build(parser_name="2D UNet experiment planner")\
+        .add_task_name_parameter()\
+        .finish_build()
+    args = parser.parse_args()
+    print("\n\n\n", args.task_name)
+    cropped_out_dir = os.path.join(CROPPED_OUTPUT_DIR, args.task_name)
+    preprocessing_output_dir_this_task = os.path.join(PRE_PROCESSING_OUTPUT_DIR, args.task_name)
+    splitted_4d_output_dir_task = os.path.join(SPLITTED_4D_OUTPUT_DIR, args.task_name)
     lists, modalities = create_lists_from_splitted_dataset(splitted_4d_output_dir_task)
 
     # need to be careful with RAM usage
-    if t in ["Task29_LITS", "Task03_Liver", "Task16_BoneSegmentationOrigs", "Task14_BoneSegmentation"]:
+    if args.task_name in ["Task29_LITS", "Task03_Liver", "Task16_BoneSegmentationOrigs", "Task14_BoneSegmentation"]:
         threads = 3
-    elif t in ["Task22_LungIntern", "Task19_FibroticLungSegmentation", "Task06_Lung", "Task08_HepaticVessel"]:
+    elif args.task_name in ["Task22_LungIntern", "Task19_FibroticLungSegmentation", "Task06_Lung", "Task08_HepaticVessel"]:
         threads = 6
     else:
         threads = 8
 
     print("number of threads: ", threads, "\n")
 
-    print("\n\n\n", t)
-    exp_planner = ExperimentPlanner2D(cropped_out_dir, preprocessing_output_dir_this_task, threads)
+    print("\n\n\n", args.task_name)
+    exp_planner = ExperimentPlanner2D(
+        folder_with_cropped_data=cropped_out_dir,
+        preprocessed_output_folder=preprocessing_output_dir_this_task
+    )
     exp_planner.plan_experiment()
-    exp_planner.run_preprocessing()
+    exp_planner.run_preprocessing(num_threads=threads)
