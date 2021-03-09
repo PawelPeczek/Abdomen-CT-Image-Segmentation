@@ -13,53 +13,84 @@
 #    limitations under the License.
 
 from collections import OrderedDict
+from glob import glob
+from typing import List, Set
+
 from batchgenerators.utilities.file_and_folder_operations import *
-import shutil
-import numpy as np
+
+from nnunet.config import DEFAULT_RAW_DATASET_DIR, TARGET_TEST_DATA_DIR, \
+    TARGET_TRAIN_LABELS_DIR, TARGET_TRAIN_DATA_DIR
+from nnunet.utilities.argparse import ArgParserBuilder
+
+KITS_TRAINING_CASES = {i for i in range(210)}
+KITS_TEST_CASES = {i for i in range(210, 300)}
+DATA_FILE_NAME = "imaging.nii.gz"
+SEGMENTATION_FILE_NAME = "segmentation.nii.gz"
 
 
-def convert_to_submission(source_dir, target_dir):
-    niftis = subfiles(source_dir, join=False, suffix=".nii.gz")
-    patientids = np.unique([i[:10] for i in niftis])
-    maybe_mkdir_p(target_dir)
-    for p in patientids:
-        files_of_that_patient = subfiles(source_dir, prefix=p, suffix=".nii.gz", join=False)
-        assert len(files_of_that_patient)
-        files_of_that_patient.sort()
-        # first is ED, second is ES
-        shutil.copy(join(source_dir, files_of_that_patient[0]), join(target_dir, p + "_ED.nii.gz"))
-        shutil.copy(join(source_dir, files_of_that_patient[1]), join(target_dir, p + "_ES.nii.gz"))
+
+def get_kits_cases_directories(
+    input_dataset_dir: str,
+    cases_numbers: Set[int]
+) -> List[str]:
+    all_cases_dirs = glob(os.path.join(input_dataset_dir, "case_*"))
+    return [
+        d for d in all_cases_dirs
+        if int(d.split("_")[-1]) in cases_numbers
+    ]
 
 
 if __name__ == "__main__":
-    folder = "/home/tureckova/Pictures/kits19/data"
-    folder_test = "/home/tureckova/Pictures/kits19/test"
-    out_folder = "/home/tureckova/Pictures/nnUNet/nnUNet_base/nnUNet_raw_splitted/KiTS2019"
-
-    maybe_mkdir_p(join(out_folder, "imagesTr"))
-    maybe_mkdir_p(join(out_folder, "imagesTs"))
-    maybe_mkdir_p(join(out_folder, "labelsTr"))
+    parser = ArgParserBuilder() \
+        .initialize_build(parser_name="KiTS2019 dataset converter") \
+        .add_input_dataset_dir_parameter() \
+        .finish_build()
+    args = parser.parse_args()
+    out_folder = os.path.join(DEFAULT_RAW_DATASET_DIR, "KITS2019")
+    target_train_data_path = os.path.join(out_folder, TARGET_TRAIN_DATA_DIR)
+    target_train_labels_path = os.path.join(out_folder, TARGET_TRAIN_LABELS_DIR)
+    target_test_data_path = os.path.join(out_folder, TARGET_TEST_DATA_DIR)
+    for path in [target_train_data_path, target_train_labels_path, target_test_data_path]:
+        os.makedirs(path, exist_ok=True)
 
     # train
     all_train_files = []
-    patient_dirs_train = subfolders(folder, prefix="case")
+    patient_dirs_train = get_kits_cases_directories(
+        input_dataset_dir=args.input_dataset_dir,
+        cases_numbers=KITS_TRAINING_CASES
+    )
     for current_dir in patient_dirs_train:
-        data_file_train = current_dir + "/imaging.nii.gz"
-        seg_file = current_dir + "/segmentation.nii.gz"
-        patient_identifier = "KiTS2019_" + current_dir[-3:]
-        all_train_files.append(patient_identifier + "_0000.nii.gz")
-        #shutil.copy(data_file_train, join(out_folder, "imagesTr", patient_identifier + "_0000.nii.gz"))
-        #shutil.copy(seg_file, join(out_folder, "labelsTr", patient_identifier + ".nii.gz"))
+        case_identifier = int(current_dir.split("_")[-1])
+        data_file_train = os.path.join(current_dir, DATA_FILE_NAME)
+        segmentation_file_train = os.path.join(
+            current_dir, SEGMENTATION_FILE_NAME
+        )
+        target_segmentation_file_path = os.path.join(
+            target_train_labels_path, f"{case_identifier}_0000.nii.gz"
+        )
+        target_train_file_path = os.path.join(
+            target_train_data_path, f"{case_identifier}_0000.nii.gz"
+        )
+        os.symlink(data_file_train, target_train_file_path)
+        os.symlink(segmentation_file_train, target_segmentation_file_path)
+        all_train_files.append(
+            (target_train_file_path, target_segmentation_file_path)
+        )
 
     # test
     all_test_files = []
-    patient_dirs_test = subfolders(folder_test, prefix="case")
+    patient_dirs_test = get_kits_cases_directories(
+        input_dataset_dir=args.input_dataset_dir,
+        cases_numbers=KITS_TEST_CASES
+    )
     for current_dir in patient_dirs_test:
-        data_file_train = current_dir + "/imaging.nii.gz"
-        patient_identifier = "KiTS2019_" + current_dir[-3:]
-        all_test_files.append(patient_identifier + "_0000.nii.gz")
-        #shutil.copy(data_file_train, join(out_folder, "imagesTs", patient_identifier + "_0000.nii.gz"))
-
+        case_identifier = int(current_dir.split("_")[-1])
+        data_file_test = os.path.join(current_dir, DATA_FILE_NAME)
+        target_test_file_path = os.path.join(
+            target_test_data_path,  f"{case_identifier}_0000.nii.gz"
+        )
+        os.symlink(data_file_test, target_test_file_path)
+        all_test_files.append(target_test_file_path)
 
     json_dict = OrderedDict()
     json_dict['name'] = "KiTS2019"
@@ -73,13 +104,16 @@ if __name__ == "__main__":
     }
     json_dict['labels'] = {
         "0": "background",
-        "1": "Liver",
+        "1": "Kidney",
         "2": "Tumor"
     }
     json_dict['numTraining'] = len(all_train_files)
-    json_dict['numTest'] = 0 #len(all_test_files)
-    json_dict['training'] = [{'image': "./imagesTr/%s.nii.gz" % i.split("/")[-1][:-12], "label": "./labelsTr/%s.nii.gz" % i.split("/")[-1][:-12]} for i in
-                             all_train_files]
-    json_dict['test'] = ["./imagesTs/%s.nii.gz" % i.split("/")[-1][:-12] for i in all_test_files]
-
+    json_dict['numTest'] = len(all_test_files)
+    json_dict['training'] = [
+        {
+            'image': image_path,
+            "label": label_path
+        } for image_path, label_path in all_train_files
+    ]
+    json_dict['test'] = all_test_files
     save_json(json_dict, os.path.join(out_folder, "dataset.json"))

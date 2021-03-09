@@ -12,10 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from nnunet.experiment_planning.experiment_planner_baseline_3DUNet import \
+    ExperimentPlanner
 from nnunet.experiment_planning.find_classes_in_slice import add_classes_in_slice_info
 from nnunet.preprocessing.cropping import ImageCropper
 from batchgenerators.utilities.file_and_folder_operations import *
-from nnunet.paths import splitted_4d_output_dir, cropped_output_dir, preprocessing_output_dir, raw_dataset_dir
+from nnunet.config import SPLITTED_4D_OUTPUT_DIR, CROPPED_OUTPUT_DIR,\
+    PRE_PROCESSING_OUTPUT_DIR, RAW_DATASET_DIR
 import numpy as np
 import pickle
 from nnunet.experiment_planning.DatasetAnalyzer import DatasetAnalyzer
@@ -26,9 +29,9 @@ import shutil
 from nnunet.experiment_planning.common_utils import split_4d_nifti
 
 
-def split_4d(task_string):
-    base_folder = join(raw_dataset_dir, task_string)
-    output_folder = join(splitted_4d_output_dir, task_string)
+def split_4d(task_string: str) -> None:
+    base_folder = join(RAW_DATASET_DIR, task_string)
+    output_folder = join(SPLITTED_4D_OUTPUT_DIR, task_string)
 
     if isdir(output_folder):
         shutil.rmtree(output_folder)
@@ -98,23 +101,23 @@ def get_caseIDs_from_splitted_dataset_folder(folder):
 
 
 def crop(task_string, override=False, num_threads=8):
-    cropped_out_dir = join(cropped_output_dir, task_string)
+    cropped_out_dir = join(CROPPED_OUTPUT_DIR, task_string)
     maybe_mkdir_p(cropped_out_dir)
 
     if override and isdir(cropped_out_dir):
         shutil.rmtree(cropped_out_dir)
         maybe_mkdir_p(cropped_out_dir)
 
-    splitted_4d_output_dir_task = join(splitted_4d_output_dir, task_string)
-    lists, _ = create_lists_from_splitted_dataset(splitted_4d_output_dir_task)
+    SPLITTED_4D_OUTPUT_DIR_task = join(SPLITTED_4D_OUTPUT_DIR, task_string)
+    lists, _ = create_lists_from_splitted_dataset(SPLITTED_4D_OUTPUT_DIR_task)
 
     imgcrop = ImageCropper(num_threads, cropped_out_dir)
     imgcrop.run_cropping(lists, overwrite_existing=override)
-    shutil.copy(join(splitted_4d_output_dir, task_string, "dataset.json"), cropped_out_dir)
+    shutil.copy(join(SPLITTED_4D_OUTPUT_DIR, task_string, "dataset.json"), cropped_out_dir)
 
 
 def analyze_dataset(task_string, override=False, collect_intensityproperties=True, num_processes=8):
-    cropped_out_dir = join(cropped_output_dir, task_string)
+    cropped_out_dir = join(CROPPED_OUTPUT_DIR, task_string)
     dataset_analyzer = DatasetAnalyzer(cropped_out_dir, overwrite=override, num_processes=num_processes)
     _ = dataset_analyzer.analyze_dataset(collect_intensityproperties)
 
@@ -123,22 +126,17 @@ def plan_and_preprocess(task_string, num_threads=8, no_preprocessing=False):
     from nnunet.experiment_planning.experiment_planner_baseline_2DUNet import ExperimentPlanner2D
     # from nnunet.experiment_planning.experiment_planner_baseline_3DUNet import ExperimentPlanner
 
-    preprocessing_output_dir_this_task_train = join(preprocessing_output_dir, task_string)
-    cropped_out_dir = join(cropped_output_dir, task_string)
+    preprocessing_output_dir_this_task_train = join(PRE_PROCESSING_OUTPUT_DIR, task_string)
+    cropped_out_dir = join(CROPPED_OUTPUT_DIR, task_string)
     maybe_mkdir_p(preprocessing_output_dir_this_task_train)
 
     shutil.copy(join(cropped_out_dir, "dataset_properties.pkl"), preprocessing_output_dir_this_task_train)
-    shutil.copy(join(splitted_4d_output_dir, task_string, "dataset.json"), preprocessing_output_dir_this_task_train)
+    shutil.copy(join(SPLITTED_4D_OUTPUT_DIR, task_string, "dataset.json"), preprocessing_output_dir_this_task_train)
 
     exp_planner = ExperimentPlanner(cropped_out_dir, preprocessing_output_dir_this_task_train)
     exp_planner.plan_experiment()
     if not no_preprocessing:
         exp_planner.run_preprocessing(num_threads)
-
-    # exp_planner = ExperimentPlanner2D(cropped_out_dir, preprocessing_output_dir_this_task_train)
-    # exp_planner.plan_experiment()
-    # if not no_preprocessing:
-    #     exp_planner.run_preprocessing(num_threads)
 
     # write which class is in which slice to all training cases (required to speed up 2D Dataloader)
     # This is done for all data so that if we wanted to use them with 2D we could do so
@@ -214,20 +212,20 @@ if __name__ == "__main__":
         raise ValueError("only 0 or 1 allowed for use_splitted")
 
     if task == "all":
-        all_tasks_that_need_splitting = subdirs(raw_dataset_dir, prefix="Task", join=False)
+        all_tasks_that_need_splitting = subdirs(RAW_DATASET_DIR, prefix="Task", join=False)
 
         for t in all_tasks_that_need_splitting:
-            if not use_splitted or not isdir(join(splitted_4d_output_dir, t)):
+            if not use_splitted or not isdir(join(SPLITTED_4D_OUTPUT_DIR, t)):
                 print("splitting task ", t)
                 split_4d(t)
 
-        all_splitted_tasks = subdirs(splitted_4d_output_dir, prefix="Task", join=False)
+        all_splitted_tasks = subdirs(SPLITTED_4D_OUTPUT_DIR, prefix="Task", join=False)
         for t in all_splitted_tasks:
             crop(t, override=override, num_threads=processes)
             analyze_dataset(t, override=override, collect_intensityproperties=True, num_processes=processes)
             plan_and_preprocess(t, processes, no_preprocessing)
     else:
-        if not use_splitted or not isdir(join(splitted_4d_output_dir, task)):
+        if not use_splitted or not isdir(join(SPLITTED_4D_OUTPUT_DIR, task)):
             print("splitting task ", task)
             split_4d(task)
 

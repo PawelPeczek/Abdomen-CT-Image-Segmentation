@@ -8,7 +8,7 @@ TASK_NAME_PARAMETER = "task_name"
 class ArgParserBuilder:
 
     def __init__(self):
-        self.__parser = Optional[argparse.ArgumentParser] = None
+        self.__parser: Optional[argparse.ArgumentParser] = None
 
     def initialize_build(self, parser_name: str) -> ArgParserBuilder:
         self.__ensure_parser_not_initialized()
@@ -24,9 +24,18 @@ class ArgParserBuilder:
     def add_task_name_parameter(self) -> ArgParserBuilder:
         self.__ensure_parser_initialized()
         self.__parser.add_argument(
-            "task_name",
+            "--task_name",
             type=str,
-            reqired=True
+            required=True
+        )
+        return self
+
+    def add_input_dataset_dir_parameter(self) -> ArgParserBuilder:
+        self.__ensure_parser_initialized()
+        self.__parser.add_argument(
+            "--input_dataset_dir",
+            type=str,
+            required=True
         )
         return self
 

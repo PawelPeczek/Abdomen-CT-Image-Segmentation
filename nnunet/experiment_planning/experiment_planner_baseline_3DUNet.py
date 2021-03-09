@@ -14,9 +14,7 @@
 
 from copy import deepcopy
 import numpy as np
-from nnunet.experiment_planning.DatasetAnalyzer import DatasetAnalyzer
 from nnunet.experiment_planning.common_utils import get_pool_and_conv_props_poolLateV2
-from nnunet.experiment_planning.plan_and_preprocess_task import create_lists_from_splitted_dataset, crop
 from nnunet.preprocessing.cropping import get_case_identifier_from_npz
 from nnunet.preprocessing.preprocessing import GenericPreprocessor
 from nnunet.experiment_planning.configuration import FEATUREMAP_MIN_EDGE_LENGTH_BOTTLENECK, TARGET_SPACING_PERCENTILE, \
@@ -25,7 +23,7 @@ from nnunet.experiment_planning.configuration import FEATUREMAP_MIN_EDGE_LENGTH_
     RESAMPLING_SEPARATE_Z_ANISOTROPY_THRESHOLD
 from batchgenerators.utilities.file_and_folder_operations import *
 import shutil
-from nnunet.paths import *
+from nnunet.config import *
 from nnunet.network_architecture import Generic_UNet
 from collections import OrderedDict
 
@@ -42,7 +40,7 @@ class ExperimentPlanner(object):
 
         self.plans_per_stage = OrderedDict()
         self.plans = OrderedDict()
-        self.plans_fname = join(self.preprocessed_output_folder, default_plans_identifier + "_plans_3D.pkl")
+        self.plans_fname = join(self.preprocessed_output_folder, DEFAULT_PLANS_IDENTIFIER + "_plans_3D.pkl")
         self.data_identifier = 'nnUNet'
 
     def get_target_spacing(self):
@@ -382,30 +380,3 @@ class ExperimentPlanner(object):
             num_threads = num_threads[-1]
         preprocessor.run(target_spacings, self.folder_with_cropped_data, self.preprocessed_output_folder,
                          self.plans['data_identifier'], num_threads)
-
-
-if __name__ == "__main__":
-    t = "Task12_BrainTumorIntern"
-
-    threads = 64
-
-    crop(t, False, threads)
-
-    print("\n\n\n", t)
-    cropped_out_dir = os.path.join(cropped_output_dir, t)
-    preprocessing_output_dir_this_task = os.path.join(preprocessing_output_dir, t)
-    splitted_4d_output_dir_task = os.path.join(splitted_4d_output_dir, t)
-    lists, modalities = create_lists_from_splitted_dataset(splitted_4d_output_dir_task)
-
-    dataset_analyzer = DatasetAnalyzer(cropped_out_dir, overwrite=False, num_processes=threads)
-    _ = dataset_analyzer.analyze_dataset(collect_intensityproperties=True) # this will write output files that will be used by the ExperimentPlanner
-
-    maybe_mkdir_p(preprocessing_output_dir_this_task)
-    shutil.copy(join(cropped_out_dir, "dataset_properties.pkl"), preprocessing_output_dir_this_task)
-    shutil.copy(join(splitted_4d_output_dir, t, "dataset.json"), preprocessing_output_dir_this_task)
-
-    print("number of threads: ", threads, "\n")
-
-    exp_planner = ExperimentPlanner(cropped_out_dir, preprocessing_output_dir_this_task)
-    exp_planner.plan_experiment()
-    exp_planner.run_preprocessing(threads)

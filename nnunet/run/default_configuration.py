@@ -13,7 +13,8 @@
 #    limitations under the License.
 
 import nnunet
-from nnunet.paths import network_training_output_dir, preprocessing_output_dir, default_plans_identifier
+from nnunet.config import NETWORK_TRAINING_OUTPUT_DIR, PRE_PROCESSING_OUTPUT_DIR, \
+    DEFAULT_PLANS_IDENTIFIER
 from batchgenerators.utilities.file_and_folder_operations import *
 from nnunet.experiment_planning.summarize_plans import summarize_plans
 from nnunet.training.model_restore import recursive_find_trainer
@@ -21,7 +22,7 @@ from nnunet.training.model_restore import recursive_find_trainer
 
 def get_configuration_from_output_folder(folder):
     # split off network_training_output_dir
-    folder = folder[len(network_training_output_dir):]
+    folder = folder[len(NETWORK_TRAINING_OUTPUT_DIR):]
     if folder.startswith("/"):
         folder = folder[1:]
 
@@ -31,21 +32,21 @@ def get_configuration_from_output_folder(folder):
 
 
 def get_output_folder(configuration, task, trainer, plans_identifier):
-    return join(network_training_output_dir, configuration, task, trainer + "__" + plans_identifier)
+    return join(NETWORK_TRAINING_OUTPUT_DIR, configuration, task, trainer + "__" + plans_identifier)
 
 
-def get_default_configuration(network, task, network_trainer, plans_identifier=default_plans_identifier,
+def get_default_configuration(network, task, network_trainer, plans_identifier=DEFAULT_PLANS_IDENTIFIER,
                               search_in=(nnunet.__path__[0], "training", "network_training"),
                               base_module='nnunet.training.network_training'):
     assert network in ['2d', '3d_lowres', '3d_fullres', '3d_cascade_fullres'], \
         "network can only be one of the following: \'3d\', \'3d_lowres\', \'3d_fullres\', \'3d_cascade_fullres\'"
 
-    dataset_directory = join(preprocessing_output_dir, task)
+    dataset_directory = join(DEFAULT_PLANS_IDENTIFIER, task)
 
     if network == '2d':
-        plans_file = join(preprocessing_output_dir, task, plans_identifier + "_plans_2D.pkl")
+        plans_file = join(DEFAULT_PLANS_IDENTIFIER, task, plans_identifier + "_plans_2D.pkl")
     else:
-        plans_file = join(preprocessing_output_dir, task, plans_identifier + "_plans_3D.pkl")
+        plans_file = join(DEFAULT_PLANS_IDENTIFIER, task, plans_identifier + "_plans_3D.pkl")
 
     plans = load_pickle(plans_file)
     possible_stages = list(plans['plans_per_stage'].keys())
@@ -62,7 +63,7 @@ def get_default_configuration(network, task, network_trainer, plans_identifier=d
     trainer_class = recursive_find_trainer([join(*search_in)], network_trainer,
                                            current_module=base_module)
 
-    output_folder_name = join(network_training_output_dir, network, task, network_trainer + "__" + plans_identifier)
+    output_folder_name = join(NETWORK_TRAINING_OUTPUT_DIR, network, task, network_trainer + "__" + plans_identifier)
 
     print("###############################################")
     print("I am running the following nnUNet: %s" % network)

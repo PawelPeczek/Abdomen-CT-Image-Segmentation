@@ -13,10 +13,9 @@
 #    limitations under the License.
 
 import argparse
-from batchgenerators.utilities.file_and_folder_operations import *
+
+from nnunet.config import DEFAULT_PLANS_IDENTIFIER
 from nnunet.run.default_configuration import get_default_configuration
-from nnunet.paths import default_plans_identifier
-from nnunet.training.cascade_stuff.predict_next_stage import predict_next_stage
 from nnunet.training.network_training.nnUNetTrainer import nnUNetTrainer
 from nnunet.training.network_training.nnUNetTrainerCascadeFullRes import nnUNetTrainerCascadeFullRes
 
@@ -30,7 +29,7 @@ if __name__ == "__main__":
                         action="store_true")
     parser.add_argument("-c", "--continue_training", help="use this if you want to continue a training",
                         action="store_true")
-    parser.add_argument("-p", help="plans identifier", default=default_plans_identifier, required=False)
+    parser.add_argument("-p", help="plans identifier", default=DEFAULT_PLANS_IDENTIFIER, required=False)
     parser.add_argument("-u", "--unpack_data", help="Leave it as 1, development only", required=False, default=1,
                         type=int)
     parser.add_argument("--ndet", help="Per default training is deterministic, "
